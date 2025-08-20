@@ -59,7 +59,18 @@ class LabelAttention(nn.Module):
         torch.nn.init.normal_(self.third_linear.weight, mean, std)
 
 class LabelCrossAttention(nn.Module):
-    def __init__(self, input_size: int, num_classes: int, scale: float = 1.0):
+    def __init__(
+        self, 
+        input_size: int, 
+        num_classes: int, 
+        scale: float = 1.0,
+        init_with_descriptions: bool = False,
+        model_path: str = None,
+        target_tokenizer = None,
+        icd_version: int = 10,
+        freeze_label_embeddings: bool = False,
+        random_init: bool = False
+    ):
         super().__init__()
         self.weights_k = nn.Linear(input_size, input_size, bias=False)
         self.label_representations = torch.nn.Parameter(
@@ -70,7 +81,20 @@ class LabelCrossAttention(nn.Module):
         self.layernorm = nn.LayerNorm(input_size)
         self.num_classes = num_classes
         self.scale = scale
-        self._init_weights(mean=0.0, std=0.03)
+        
+        # Initialise weights
+        if init_with_descriptions and model_path and target_tokenizer is not None:
+            if random_init:
+                self._init_weights_random_descriptions(model_path, target_tokenizer, icd_version)
+            else:
+                self._init_weights_description_embeddings(model_path, target_tokenizer, icd_version)
+        else:
+            self._init_weights(mean=0.0, std=0.03)
+        
+        # Freeze label embeddings if requested
+        if freeze_label_embeddings:
+            self.freeze_label_embeddings()
+        
 
     def forward(
         self,
@@ -152,6 +176,175 @@ class LabelCrossAttention(nn.Module):
             self.output_linear.weight, mean, std
         )
 
+    def _init_weights_description_embeddings(
+        self, 
+        model_path: str, 
+        target_tokenizer,
+        icd_version: int = 10,
+        batch_size: int = 64,
+        mean: float = 0.0, 
+        std: float = 0.03
+    ) -> None:
+        """Initialize label representations with ICD code description embeddings.
+
+        Args:
+            model_path (str): Path to the transformer model for generating embeddings
+            target_tokenizer: TargetTokenizer that maps indices to ICD codes
+            icd_version (int): ICD version (9 or 10). Defaults to 10.
+            batch_size (int): Batch size for processing descriptions. Defaults to 64.
+        """
+        self.weights_k.weight = torch.nn.init.normal_(self.weights_k.weight, mean, std)
+        self.weights_v.weight = torch.nn.init.normal_(self.weights_v.weight, mean, std)
+        
+        self.output_linear.weight = torch.nn.init.normal_(
+            self.output_linear.weight, mean, std
+        )
+
+        # Load ICD descriptions
+        code2desc = get_code2description_mimiciv_combined(icd_version)
+        
+        # Load embedding model
+        embed_model = AutoModel.from_pretrained(model_path)
+        embed_model = embed_model.cuda()
+        embed_tokenizer = AutoTokenizer.from_pretrained(model_path)
+        
+        # Collect all descriptions in target_tokenizer order
+        descriptions = []
+        for i in range(len(target_tokenizer)):
+            icd_code = target_tokenizer.id2target[i]
+            descriptions.append(code2desc[icd_code])
+        
+        # Process descriptions in batches with progress bar
+        all_embeddings = []
+        batch_ranges = range(0, len(descriptions), batch_size)
+        
+        for i in track(batch_ranges, description="Generating description embeddings..."):
+            batch_descriptions = descriptions[i:i+batch_size]
+            
+            # Batch tokenization
+            tokens = embed_tokenizer(
+                batch_descriptions,
+                return_tensors="pt", 
+                truncation=True, 
+                max_length=64,
+                padding=True
+            ).to('cuda')
+            
+            # Batch forward pass
+            with torch.no_grad():
+                outputs = embed_model(**tokens)
+                # Mean pooling with attention mask to handle padding
+                attention_mask = tokens['attention_mask'].unsqueeze(-1)
+                masked_embeddings = outputs.last_hidden_state * attention_mask
+                embeddings = masked_embeddings.sum(dim=1) / attention_mask.sum(dim=1)
+                all_embeddings.append(embeddings)
+        
+        # Combine all embeddings and replace parameter data
+        final_embeddings = torch.cat(all_embeddings, dim=0)
+        self.label_representations.data.copy_(final_embeddings)
+        
+        # Clean up the temporary model to free memory
+        del embed_model
+        del embed_tokenizer
+
+    def _init_weights_random_descriptions(
+        self, 
+        model_path: str, 
+        target_tokenizer,
+        icd_version: int = 10,
+        batch_size: int = 64,
+        max_desc_len: int = 64,
+        mean: float = 0.0, 
+        std: float = 0.03
+    ) -> None:
+        """Initialize label representations with embeddings from random text descriptions.
+
+        Args:
+            model_path (str): Path to the transformer model for generating embeddings
+            target_tokenizer: TargetTokenizer that maps indices to ICD codes
+            icd_version (int): ICD version (9 or 10). Defaults to 10.
+            batch_size (int): Batch size for processing descriptions. Defaults to 64.
+            max_desc_len (int): Maximum description length for tokenization. Defaults to 64.
+        """
+        self.weights_k.weight = torch.nn.init.normal_(self.weights_k.weight, mean, std)
+        self.weights_v.weight = torch.nn.init.normal_(self.weights_v.weight, mean, std)
+        
+        self.output_linear.weight = torch.nn.init.normal_(
+            self.output_linear.weight, mean, std
+        )
+
+        def generate_random_text(seed):
+            """Generate random text with characters and spaces using class-specific seed."""
+            rng = random.Random(42 + seed)
+            result = []
+            remaining_length = rng.randint(30, 130)  # Total character budget
+            
+            while remaining_length > 0:
+                # Add random characters (3-10 chars)
+                char_length = min(rng.randint(3, 10), remaining_length)
+                chars = ''.join(rng.choices(string.ascii_letters + string.digits, k=char_length))
+                result.append(chars)
+                remaining_length -= char_length
+                
+                # Add space if there's still length remaining
+                if remaining_length > 0:
+                    result.append(' ')
+                    remaining_length -= 1
+            
+            return ''.join(result)
+        
+        # Load embedding model
+        embed_model = AutoModel.from_pretrained(model_path)
+        embed_model = embed_model.cuda()
+        embed_tokenizer = AutoTokenizer.from_pretrained(model_path)
+        
+        # Generate random text for each target with different seeds
+        descriptions = []
+        for i in range(len(target_tokenizer)):
+            desc = generate_random_text(i)
+            descriptions.append(desc)
+        
+        # Process descriptions in batches with progress bar
+        all_embeddings = []
+        batch_ranges = range(0, len(descriptions), batch_size)
+        
+        for i in track(batch_ranges, description="Generating random description embeddings..."):
+            batch_descriptions = descriptions[i:i+batch_size]
+            
+            # Batch tokenization
+            tokens = embed_tokenizer(
+                batch_descriptions,
+                return_tensors="pt", 
+                truncation=True, 
+                max_length=max_desc_len,
+                padding=True
+            ).to('cuda')
+            
+            # Batch forward pass
+            with torch.no_grad():
+                outputs = embed_model(**tokens)
+                # Mean pooling with attention mask to handle padding
+                attention_mask = tokens['attention_mask'].unsqueeze(-1)
+                masked_embeddings = outputs.last_hidden_state * attention_mask
+                embeddings = masked_embeddings.sum(dim=1) / attention_mask.sum(dim=1)
+                all_embeddings.append(embeddings)
+        
+        # Combine all embeddings and replace parameter data
+        final_embeddings = torch.cat(all_embeddings, dim=0)
+        self.label_representations.data.copy_(final_embeddings)
+        
+        # Clean up the temporary model to free memory
+        del embed_model
+        del embed_tokenizer
+
+    def freeze_label_embeddings(self) -> None:
+        """Freeze the label representation parameters."""
+        self.label_representations.requires_grad = False
+        
+    def unfreeze_label_embeddings(self) -> None:
+        """Unfreeze the label representation parameters."""
+        self.label_representations.requires_grad = True
+
 class LabelCrossAttentionDE(nn.Module):
     def __init__(
         self, 
@@ -164,12 +357,9 @@ class LabelCrossAttentionDE(nn.Module):
         icd_version: int = 10,
         desc_batch_size: int = 64,
         random_init: bool = False,
-        # init_with_descriptions: bool = False,
-        # model_path: str = None,
-        # freeze_label_embeddings: bool = False
     ):
         super().__init__()
-        # Add back K and V projections for clinical note
+
         self.weights_k = nn.Linear(input_size, input_size, bias=False)
         self.weights_v = nn.Linear(input_size, input_size)
         self.output_linear = nn.Linear(input_size, 1)
@@ -314,7 +504,7 @@ class LabelCrossAttentionDE(nn.Module):
             torch.Tensor: [batch_size, num_classes]
         """
 
-        # Use projected embeddings for clinical text
+
         V = self.weights_v(x)  # Projected clinical text embeddings
         K = self.weights_k(x)  # Projected clinical text embeddings
         
@@ -370,97 +560,19 @@ class LabelCrossAttentionDE(nn.Module):
             mean (float, optional): Mean of the normal distribution. Defaults to 0.0.
             std (float, optional): Standard deviation of the normal distribution. Defaults to 0.03.
         """
-
-        # Initialize K and V projection weights
         self.weights_k.weight = torch.nn.init.normal_(self.weights_k.weight, mean, std)
         self.weights_v.weight = torch.nn.init.normal_(self.weights_v.weight, mean, std)
         self.output_linear.weight = torch.nn.init.normal_(
             self.output_linear.weight, mean, std
         )
 
-    # def _init_weights_description_embeddings(
-    #     self, 
-    #     model_path: str, 
-    #     target_tokenizer,
-    #     icd_version: int = 10,
-    #     batch_size: int = 64,
-    #     mean: float = 0.0, 
-    #     std: float = 0.03
-    # ) -> None:
-    #     """Initialize label representations with ICD code description embeddings.
-    # 
-    #     Args:
-    #         model_path (str): Path to the transformer model for generating embeddings
-    #         target_tokenizer: TargetTokenizer that maps indices to ICD codes
-    #         icd_version (int): ICD version (9 or 10). Defaults to 10.
-    #         batch_size (int): Batch size for processing descriptions. Defaults to 64.
-    #     """
-    #     self.weights_k.weight = torch.nn.init.normal_(self.weights_k.weight, mean, std)
-    #     self.weights_v.weight = torch.nn.init.normal_(self.weights_v.weight, mean, std)
-    #     
-    #     self.output_linear.weight = torch.nn.init.normal_(
-    #         self.output_linear.weight, mean, std
-    #     )
-    # 
-    #     # Load ICD descriptions
-    #     code2desc = get_code2description_mimiciv_combined(icd_version)
-    #     
-    #     # Load embedding model
-    #     embed_model = AutoModel.from_pretrained(model_path)
-    #     embed_model = embed_model.cuda()
-    #     embed_tokenizer = AutoTokenizer.from_pretrained(model_path)
-    #     
-    #     # Collect all descriptions in target_tokenizer order
-    #     descriptions = []
-    #     for i in range(len(target_tokenizer)):
-    #         icd_code = target_tokenizer.id2target[i]
-    #         descriptions.append(code2desc[icd_code])
-    #     
-    #     # Process descriptions in batches with progress bar
-    #     all_embeddings = []
-    #     batch_ranges = range(0, len(descriptions), batch_size)
-    #     
-    #     for i in track(batch_ranges, description="Generating description embeddings..."):
-    #         batch_descriptions = descriptions[i:i+batch_size]
-    #         
-    #         # Batch tokenization
-    #         tokens = embed_tokenizer(
-    #             batch_descriptions,
-    #             return_tensors="pt", 
-    #             truncation=True, 
-    #             max_length=64,
-    #             padding=True
-    #         ).to('cuda')
-    #         
-    #         # Batch forward pass
-    #         with torch.no_grad():
-    #             outputs = embed_model(**tokens)
-    #             # Mean pooling with attention mask to handle padding
-    #             attention_mask = tokens['attention_mask'].unsqueeze(-1)
-    #             masked_embeddings = outputs.last_hidden_state * attention_mask
-    #             embeddings = masked_embeddings.sum(dim=1) / attention_mask.sum(dim=1)
-    #             all_embeddings.append(embeddings)
-    #     
-    #     # Combine all embeddings and replace parameter data
-    #     final_embeddings = torch.cat(all_embeddings, dim=0)
-    #     self.label_representations.data.copy_(final_embeddings)
-    #     
-    #     # Clean up the temporary model to free memory
-    #     del embed_model
-    #     del embed_tokenizer
-
-    # def freeze_label_embeddings(self) -> None:
-    #     """Freeze the label representation parameters."""
-    #     self.label_representations.requires_grad = False
-    #     
-    # def unfreeze_label_embeddings(self) -> None:
-    #     """Unfreeze the label representation parameters."""
-    #     self.label_representations.requires_grad = True
-
 class TokenLevelDescriptionCrossAttention(nn.Module):
     """
     Performs cross-attention where each code description (Query) attends to the
     tokens of the clinical note (Key, Value).
+
+    Not Used in the dissertation due to high memory requirements and computation time.
+    dynamic_token_level_cross_attention.py is used instead.
 
     """
     def __init__(
@@ -857,7 +969,7 @@ class DynamicTokenLevelCrossAttention(nn.Module):
         batch_size, note_seq_len, _ = x.shape
         _, k, desc_seq_len, _ = encoded_descriptions.shape
         
-        # Use projected embeddings
+        # Project descriptions and notes
         q_desc = self.q_proj(encoded_descriptions)   # -> [batch_size, k, desc_seq, dim]
         k_note = self.k_proj(x)                      # -> [batch, note_seq, dim]
         v_note = self.v_proj(x)                      # -> [batch, note_seq, dim]

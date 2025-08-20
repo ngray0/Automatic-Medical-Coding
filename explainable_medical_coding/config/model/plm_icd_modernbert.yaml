@@ -11,4 +11,4 @@ configs:
   mask_input: false
   use_peft: false
   freeze_label_embeddings: false
-  init_with_descriptions: true
+  init_with_descriptions: false

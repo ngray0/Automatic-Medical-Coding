@@ -46,6 +46,8 @@ class PLMICD(nn.Module):
         cross_attention: bool = True,
         attention_type: str = "label",  # "label", "token_level", "dual_encoding"
         random_init: bool = False,
+        init_with_descriptions: bool = False,
+        freeze_label_embeddings: bool = False,
         scale: float = 1.0,
         mask_input: bool = False,
         target_tokenizer = None,
@@ -128,7 +130,16 @@ class PLMICD(nn.Module):
                 )
             else:
                 self.label_wise_attention = LabelCrossAttention(
-                    input_size=self.config.hidden_size, num_classes=num_classes, scale=scale
+                    input_size=self.config.hidden_size, 
+                    num_classes=num_classes, 
+                    scale=scale, 
+                    target_tokenizer=target_tokenizer,  
+                    icd_version=kwargs.get('icd_version', 10),
+                    desc_batch_size=kwargs.get('desc_batch_size', 64),
+                    random_init=random_init,
+                    model_path=model_path,
+                    init_with_descriptions=init_with_descriptions,
+                    freeze_label_embeddings=freeze_label_embeddings
                 )
 
         else:
@@ -258,7 +269,7 @@ class PLMICD(nn.Module):
                 # Return token-level embeddings for token-level attention
                 return desc_outputs.last_hidden_state
             else:
-                # Mean pooling with attention mask for LabelCrossAttention
+                # Mean pooling with attention mask for LabelCrossAttentionDE
                 attention_mask = self.label_wise_attention.description_attention_mask.unsqueeze(-1)
                 masked_embeddings = desc_outputs.last_hidden_state * attention_mask
                 all_embeddings = masked_embeddings.sum(dim=1) / attention_mask.sum(dim=1)
@@ -500,7 +511,6 @@ class PLMICD(nn.Module):
                 input_ids, attention_masks, output_attentions, False
             )
         
-        # Stage 1: Retrieval mode with frozen encoder
         if top_k is not None:
             # Stage 1: Use frozen encoder for retrieval
             with torch.no_grad():

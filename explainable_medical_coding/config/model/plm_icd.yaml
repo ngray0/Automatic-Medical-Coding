@@ -4,11 +4,11 @@ configs:
   model_path: models/roberta-base-pm-m3-voc-hf
   chunk_size: 128
   cross_attention: true
-  attention_type: "label"  # "label", "token_level"
+  attention_type: "label"  # "label", "token_level", "dual_encoding"
   loss: binary_cross_entropy
   lambda_1: 0.0
   scale: 1
   mask_input: false
   freeze_label_embeddings: false
-  init_with_descriptions: true
+  init_with_descriptions: false
   random_init: false  # Initialization of code descriptions with random text or real descriptions
