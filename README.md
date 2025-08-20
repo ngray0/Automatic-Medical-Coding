@@ -55,9 +55,9 @@ The following commands are how to train each model in the dissertation, all expe
    * Train PLM-CA with ModernBERT, NeoBERT or BioClinical ModernBERT on a chunk size of 128. Just replace model.path with desired model: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd_modernbert model.configs.model_path=models/modernbert-base gpu=0 dataloader.max_batch_size=1 data=mimiciv_icd10 model.configs.chunk_size=128`
    * Train PLM-DCA on MIMIC-IV ICD-10 full on GPU 0: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd gpu=0 dataloader.max_batch_size=1 data=mimiciv_icd10 model.configs.init_with_descriptions=true"
    * Train PLM-DE on MIMIC-IV ICD-10 full on GPU 0: 'poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd data=mimiciv_icd10 gpu=CUDA_VISIBLE_DEVICES dataloader.max_batch_size=16 model.configs.cross_attention=true trainer.epochs=20 callbacks.2.configs.patience=20 dataloader.num_workers=32 model.configs.attention_type="dual_encoding"'
-   * Lastly to train PLM-RR, the frozen retriever must be loaded from a saved checkpoint that any of the above experiments will save to "/models/", replace PATH_TO_CHECKPOINTED_MODEL with this checkpoint: poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd data=mimiciv_icd10 gpu=CUDA_VISIBLE_DEVICES dataloader.max_batch_size=4 model.configs.cross_attention=true trainer.epochs=20 callbacks.2.configs.patience=6 dataloader.num_workers=32 model.configs.attention_type="token_level" top_k=300 load_model=/models/PATH_TO_CHECKPOINTED_MODEL'
+   * Lastly to train PLM-RR, the frozen retriever must be loaded from a saved checkpoint that any of the above experiments will save to "/models/", replace PATH_TO_CHECKPOINTED_MODEL with this checkpoint: 'poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd data=mimiciv_icd10 gpu=0 dataloader.max_batch_size=2 trainer.epochs=20 callbacks.2.configs.patience=6 dataloader.num_workers=32 model.configs.attention_type="token_level" top_k=300 load_model=/models/PATH_TO_CHECKPOINTED_MODEL'
 
-# Overview of the repository
+# Overview of the repository (inherited from https://github.com/JoakimEdin/explainable-medical-coding)
 #### configs
 We use [Hydra](https://hydra.cc/docs/intro/) for configurations. The configs for every experiment is found in `explainable_medical_coding/configs/experiments`.
 
@@ -74,7 +74,7 @@ This is the jupyter notebook used for most of the analysis done in the dissertat
 This is were the code for running the experiments and evaluating explanation methods are found.
 
 # My setup
-I ran the experiments on one A100 80GB per experiment.
+All experiements were ran on a single A100 80GB per experiment.
 
 # Acknowledgement
 Thank you again to Joakim Edin and contributers for making their [Explainable Medical Coding](https://github.com/JoakimEdin/explainable-medical-coding) available. This made experiementation much easier.
