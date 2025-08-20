@@ -51,15 +51,25 @@ download_roberta:
 	mv models/RoBERTa-base-PM-M3-Voc/RoBERTa-base-PM-M3-Voc-hf models/roberta-base-pm-m3-voc-hf
 	rm -r models/RoBERTa-base-PM-M3-Voc
 
-download_models:
-	poetry run gdown --id 1Gna1tEQqtSrBQC_2QX_1HGpZBYAFQCix -O models/temp.tar.gz
-	tar -xvzf models/temp.tar.gz
-	rm models/temp.tar.gz
+download_modernbert:
+	poetry run python -c "from transformers import AutoModel, AutoTokenizer; \
+	AutoModel.from_pretrained('answerdotai/ModernBERT-base'); \
+	AutoTokenizer.from_pretrained('answerdotai/ModernBERT-base')"
+
+download_bioclincal_modernbert:
+	poetry run python -c "from transformers import AutoModel, AutoTokenizer; \
+	AutoModel.from_pretrained('thomas-sounack/BioClinical-ModernBERT-base'); \
+	AutoTokenizer.from_pretrained('thomas-sounack/BioClinical-ModernBERT-base')"
+
+download_neobert:
+	poetry run python -c "from transformers import AutoModel, AutoTokenizer; \
+	AutoModel.from_pretrained('chandar-lab/NeoBERT'); \
+	AutoTokenizer.from_pretrained('chandar-lab/NeoBERT')"
 
 prepare_everything:
 	make setup
 	make mimiciv
-	make mimiciii
-	make mdace
 	make download_roberta
-	make download_models
+	make download_modernbert
+	make download_bioclincal_modernbert
+	make download_neobert
