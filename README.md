@@ -10,8 +10,18 @@ This fork extends the codebase in a new direction: my work does **not focus on e
 
 ## Project Focus
 
-This project centers on developing and benchmarking new architectures for automated medical coding, including **PLM-RR (Pretrained Language Model with Retrieval and Re-ranking)**.  
-The goal is to improve classification performance on large-scale clinical coding tasks by integrating retrieval-augmented methods into the training pipeline.  
+This project investigates whether **modern encoders** and **external knowledge integration** can improve the state-of-the-art **PLM-CA** framework for **automatic ICD-10 coding** on **MIMIC-IV**. We:
+
+- **Benchmark long-context encoders** (ModernBERT, BioClinical-ModernBERT, NeoBERT) as **drop-in replacements** for RoBERTa, and study the effect of **reducing/removing chunking** on long clinical notes.
+- **Introduce three description-aware models**:
+  - **PLM-DCA** (Description Cross-Attention) — initializes label queries from ICD code descriptions,
+  - **PLM-DE** (Dual Encoding) — dynamically encodes descriptions alongside notes using the same encoder,
+  - **PLM-RR** (Retrieval + Re-ranking) — retrieves top-K codes with PLM-CA, then performs **token-level cross-attention** between code descriptions tokens and clinical note tokens to re-rank candidates.
+
+**Key findings.** Longer context captures long-context dependencies across extended text particularly for hypertension related codes; integrating **ICD code descriptions** adds crucial semantics for **rare codes**. **PLM-RR** achieves **state-of-the-art** rare-code performance, improving **Macro-F1 on rare codes by ~20%** and reducing **never-predicted** codes by **31.2%** vs. PLM-CA, while matching or surpassing it on other metrics.
+
+**What’s in this repo.** Reproducible training/evaluation pipelines for PLM-CA, PLM-DCA, PLM-DE, and **PLM-RR**, plus configs and scripts to run with **ModernBERT/BioClinical-ModernBERT/NeoBERT** backbones and optional long-context (less/more chunking).
+
 
 ---
 
@@ -26,32 +36,30 @@ The setup largely follows the original repository. Here is a guide to setting up
 7. Back to the main repository folder `cd -`
 8. Use a virtual environment (e.g., conda) with python 3.11.5 installed.
 9. Create a weights and biases account. It is possible to run the experiments without wandb through using debug=true flag.
-10. Prepare environment, dataset and models by running the commands 1. "make setup" 2. "make mimiciv" 3. "make download_roberta" 4. "make download_Modern_Neo"
+10. Prepare environment, dataset and models by running the command: "make prepare_everything"
 
 You are now all set to run experiments!
 
 # Note on licenses
 
 ## MIMIC
-You need to obtain a non-commercial licence from physionet to use MIMIC. You will need to complete training. The training is free, but takes a couple of hours. - [link to data access](https://physionet.org/content/mimiciii/1.4/)
+You need to obtain a non-commercial licence from physionet to use MIMIC. You will need to complete training. The training is free, but takes a couple of hours. - [link to data access](https://physionet.org/content/mimiciv/2.2/)
 
 ## Model weights can only be used non-commercially
-While we would love to make everything fully open source, we cannot. Becaue MIMIC has a non-commercial license, the models trained using that data will also have a non-commercial licence. Therefore, using our models or RoBERTa-base-PM-M3-Voc's weights for commercial usecases is forbidden.
+While we would love to make everything fully open source, we cannot. Becaue MIMIC has a non-commercial license, the models trained using that data will also have a non-commercial licence. Therefore, using our models, RoBERTa-base-PM-M3-Voc and BioClinical ModernBERT weights for commercial usecases is forbidden.
 
 # How to run experiments
 ## How to train a model
-You can run any experiment found in `explainable_medical_coding/configs/experiment`. Here are some examples:
-   * Train PLM-ICD on MIMIC-III full and MDACE on GPU 0: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd gpu=0`
-   * Train PLM-ICD using the supervised approach proposed by Cheng et al. on MIMIC-III full and MDACE on GPU 0: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd_supervised gpu=0`
-   * Train PLM-ICD using input gradient regularization on MIMIC-III full and MDACE on GPU 0: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd_igr gpu=0`
-   * Train PLM-ICD using token masking on MIMIC-III full and MDACE on GPU 0: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd_tm gpu=0`
-   * Train PLM-ICD using projected gradient descent on MIMIC-III full and MDACE on GPU 0: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd_pgd gpu=0`
-   * Train PLM-ICD on MIMIC-III full and MDACE on GPU 0 using a batch_size of 1: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd gpu=0 dataloader.max_batch_size=1`
-   * Train PLM-ICD on MIMIC-IV ICD-10 and MDACE on GPU 0: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd gpu=0 dataloader.max_batch_size=1 data=mimiciv_icd10`
+The following commands are how to train each model in the dissertation, all experiments performed on MIMIC-IV ICD-10 full, GPU 0:
+   * Train PLM-CA with RoBERTa-pm-M3-Voc: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd gpu=0 dataloader.max_batch_size=1 data=mimiciv_icd10`
+   * Train PLM-CA with ModernBERT, NeoBERT or BioClinical ModernBERT on a chunk size of 128. Just replace model.path with desired model: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd_modernbert model.configs.model_path=models/modernbert-base gpu=0 dataloader.max_batch_size=1 data=mimiciv_icd10 model.configs.chunk_size=128`
+   * Train PLM-DCA on MIMIC-IV ICD-10 full on GPU 0: `poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd gpu=0 dataloader.max_batch_size=1 data=mimiciv_icd10 model.configs.init_with_descriptions=true"
+   * Train PLM-DE on MIMIC-IV ICD-10 full on GPU 0: 'poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd data=mimiciv_icd10 gpu=CUDA_VISIBLE_DEVICES dataloader.max_batch_size=16 model.configs.cross_attention=true trainer.epochs=20 callbacks.2.configs.patience=20 dataloader.num_workers=32 model.configs.attention_type="dual_encoding"'
+   * Lastly to train PLM-RR, the frozen retriever must be loaded from a saved checkpoint that any of the above experiments will save to "/models/", replace PATH_TO_CHECKPOINTED_MODEL with this checkpoint: poetry run python train_plm.py experiment=mdace_icd9_code/plm_icd model=plm_icd data=mimiciv_icd10 gpu=CUDA_VISIBLE_DEVICES dataloader.max_batch_size=4 model.configs.cross_attention=true trainer.epochs=20 callbacks.2.configs.patience=6 dataloader.num_workers=32 model.configs.attention_type="token_level" top_k=300 load_model=/models/PATH_TO_CHECKPOINTED_MODEL'
 
 # Overview of the repository
 #### configs
-We use [Hydra](https://hydra.cc/docs/intro/) for configurations. The configs for every experiment is found in `explainable_medical_coding/configs/experiments`. Furthermore, the configuration for the sweeps are found in `explainable_medical_coding/configs/sweeps`. We used [Weights and Biases Sweeps](https://docs.wandb.ai/guides/sweeps) for most of our experiments.
+We use [Hydra](https://hydra.cc/docs/intro/) for configurations. The configs for every experiment is found in `explainable_medical_coding/configs/experiments`.
 
 #### data
 This is where the splits and datasets are stored
@@ -59,17 +67,14 @@ This is where the splits and datasets are stored
 #### models
 The directory contains the model weights.
 
-#### reports
-This is the code used to generate the plots and tables used in the paper. The code uses the Weights and Biases API to fetch the experiment results. The code is not usable by others, but was included for the possibility to validate our figures and tables.
+#### notebooks
+This is the jupyter notebook used for most of the analysis done in the dissertation.
 
 #### explainable_medical_coding
 This is were the code for running the experiments and evaluating explanation methods are found.
 
 # My setup
-I ran the experiments on one A100 80GB per experiment. I had 2TB RAM on my machine.
-
-# Other resources
-Check out [my blog post](https://substack.com/home/post/p-145913061?source=queue) criticizing popular ideas in automated medical coding. Also, check out my blog post, [Gradients are not Explanations](https://substack.com/home/post/p-148104869?source=queue). I think it will be interesting for most researchers in the field.
+I ran the experiments on one A100 80GB per experiment.
 
 # Acknowledgement
-Thank you, Jonas Lyngsø, for providing the template for making the datasets in explainable_medical_coding/datasets/.
+Thank you again to Joakim Edin and contributers for making their [Explainable Medical Coding](https://github.com/JoakimEdin/explainable-medical-coding) available. This made experiementation much easier.
