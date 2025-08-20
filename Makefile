@@ -53,18 +53,24 @@ download_roberta:
 
 download_modernbert:
 	poetry run python -c "from transformers import AutoModel, AutoTokenizer; \
-	AutoModel.from_pretrained('answerdotai/ModernBERT-base'); \
-	AutoTokenizer.from_pretrained('answerdotai/ModernBERT-base')"
+	model = AutoModel.from_pretrained('answerdotai/ModernBERT-base'); \
+	tokenizer = AutoTokenizer.from_pretrained('answerdotai/ModernBERT-base'); \
+	model.save_pretrained('models/modernbert-base'); \
+	tokenizer.save_pretrained('models/modernbert-base')"
 
 download_bioclincal_modernbert:
 	poetry run python -c "from transformers import AutoModel, AutoTokenizer; \
-	AutoModel.from_pretrained('thomas-sounack/BioClinical-ModernBERT-base'); \
-	AutoTokenizer.from_pretrained('thomas-sounack/BioClinical-ModernBERT-base')"
+	model = AutoModel.from_pretrained('thomas-sounack/BioClinical-ModernBERT-base'); \
+	tokenizer = AutoTokenizer.from_pretrained('thomas-sounack/BioClinical-ModernBERT-base'); \
+	model.save_pretrained('models/bioclinical-modernbert-base'); \
+	tokenizer.save_pretrained('models/bioclinical-modernbert-base')"
 
 download_neobert:
 	poetry run python -c "from transformers import AutoModel, AutoTokenizer; \
-	AutoModel.from_pretrained('chandar-lab/NeoBERT'); \
-	AutoTokenizer.from_pretrained('chandar-lab/NeoBERT')"
+	model = AutoModel.from_pretrained('chandar-lab/NeoBERT'); \
+	tokenizer = AutoTokenizer.from_pretrained('chandar-lab/NeoBERT'); \
+	model.save_pretrained('models/neobert-base'); \
+	tokenizer.save_pretrained('models/neobert-base')"
 
 prepare_everything:
 	make setup
