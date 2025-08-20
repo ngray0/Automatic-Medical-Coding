@@ -18,7 +18,7 @@ This project investigates whether **modern encoders** and **external knowledge i
   - **PLM-DE** (Dual Encoding) — dynamically encodes descriptions alongside notes using the same encoder,
   - **PLM-RR** (Retrieval + Re-ranking) — retrieves top-K codes with PLM-CA, then performs **token-level cross-attention** between code descriptions tokens and clinical note tokens to re-rank candidates.
 
-**Key findings.** Longer context captures long-context dependencies across extended text particularly for hypertension related codes; integrating **ICD code descriptions** adds crucial semantics for **rare codes**. **PLM-RR** achieves **state-of-the-art** rare-code performance, improving **Macro-F1 (F1 with all classes weighted equally) by ~20%** and reducing **never-predicted** codes by **31.2%** vs. PLM-CA, while matching or surpassing it on other metrics.
+**Key findings.** Reducing/ removing chunking captures long-context dependencies across extended text particularly for hypertension related codes in the PLM-CA framework; integrating **ICD code descriptions** adds crucial semantics for **rare codes**. **PLM-RR** achieves **state-of-the-art** rare-code performance, improving **Macro-F1 (F1 with all classes weighted equally) by ~20%** and reducing **never-predicted** codes by **31.2%** vs. PLM-CA, while matching or surpassing it on other metrics.
 
 **What’s in this repo.** Reproducible training/evaluation pipelines for PLM-CA, PLM-DCA, PLM-DE, and **PLM-RR**, plus configs and scripts to run with **ModernBERT/BioClinical-ModernBERT/NeoBERT** backbones and optional long-context (less/more chunking).
 
