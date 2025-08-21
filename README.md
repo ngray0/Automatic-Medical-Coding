@@ -1,4 +1,4 @@
-# Medical Coding with Modern Encoders and Modern Methods
+# Improving Automatic ICD-10 Coding with Long-Context Transformers and Description-Aware Architectures
 
 This repository is **forked from [Explainable Medical Coding](https://github.com/JoakimEdin/explainable-medical-coding)**, which accompanied the paper  
 [*An Unsupervised Approach to Achieve Supervised-Level Explainability in Healthcare Records* (Edin et al., EMNLP 2024)](https://aclanthology.org/2024.emnlp-main.280/).
