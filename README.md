@@ -68,10 +68,10 @@ This is where the splits and datasets are stored
 The directory contains the model weights.
 
 #### notebooks
-This is the jupyter notebook used for most of the analysis done in the dissertation.
+analysis.ipynb is the jupyter notebook used for the results analysis done in the dissertation.
 
 #### explainable_medical_coding
-This is were the code for running the experiments and evaluating explanation methods are found.
+This is were the code for running the experiments.
 
 # My setup
 All experiements were ran on a single A100 80GB per experiment.
